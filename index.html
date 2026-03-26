@@ -1,0 +1,1510 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eunoia — Control de Envíos</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0D0D0D">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Eunoia Envíos">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+  <style>
+    :root {
+      --black: #0D0D0D; --orange: #E2622A; --orange-light: rgba(226,98,42,0.12);
+      --bg: #FAF7F2; --white: #FFFFFF; --gray: #F2EEE8; --gray2: #E8E3DB;
+      --text: #1a1a1a; --muted: #8a8278; --green: #27ae60; --red: #e74c3c;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); padding-bottom: 80px; min-height: 100vh; }
+
+    header {
+      background: var(--black); padding: 14px 20px 11px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 3px solid var(--orange); position: sticky; top: 0; z-index: 200;
+    }
+    .header-logo { flex: 1; text-align: center; }
+    .logo-text { font-family: 'Cormorant Garamond', serif; font-size: 21px; font-weight: 700; color: white; letter-spacing: 3px; text-transform: uppercase; }
+    .logo-sub { font-size: 8px; color: var(--orange); letter-spacing: 2px; text-transform: uppercase; display: block; text-align: center; margin-top: -2px; }
+
+    /* CAMPANA */
+    .bell-btn {
+      background: none; border: none; cursor: pointer; padding: 6px; position: relative;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .bell-icon { font-size: 20px; filter: grayscale(0.3); transition: transform 0.2s; }
+    .bell-btn:hover .bell-icon { transform: rotate(-15deg); }
+    .bell-dot {
+      position: absolute; top: 4px; right: 4px; width: 9px; height: 9px;
+      background: var(--orange); border-radius: 50%; border: 2px solid var(--black);
+      display: none;
+    }
+    .bell-dot.visible { display: block; }
+    .notif-status {
+      background: rgba(255,255,255,0.06); border-radius: 8px; padding: 8px 12px;
+      font-size: 11px; color: #999; text-align: center; margin: 0 16px 14px;
+    }
+    .notif-status.ok { color: #27ae60; }
+    .notif-status.error { color: var(--red); }
+
+    nav { background: var(--black); display: flex; justify-content: space-around; position: sticky; top: 58px; z-index: 100; border-bottom: 1px solid #222; }
+    .nav-btn { background: none; border: none; color: #555; padding: 13px 8px 11px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; cursor: pointer; transition: color 0.2s; position: relative; font-family: 'DM Sans', sans-serif; }
+    .nav-btn.active { color: white; }
+    .nav-btn.active::after { content:''; position:absolute; bottom:0; left:10%; right:10%; height:2px; background:var(--orange); border-radius:2px 2px 0 0; }
+
+    .panel { display: none; padding: 16px; max-width: 500px; margin: auto; }
+    .panel.active { display: block; }
+
+    .section-title { font-family:'Cormorant Garamond',serif; font-size:26px; font-weight:600; color:var(--black); margin-bottom:16px; padding-bottom:10px; border-bottom:1px solid var(--gray2); display:flex; align-items:center; gap:8px; }
+    .section-title span { color: var(--orange); }
+
+    .card { background:var(--white); border-radius:14px; padding:16px; margin-bottom:12px; border-left:3px solid var(--orange); box-shadow:0 2px 12px rgba(0,0,0,0.06); animation:fadeIn 0.25s ease both; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none} }
+
+    .card-label { color:var(--orange); font-weight:700; font-size:9px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:3px; }
+    .guia-badge { background:var(--gray); color:var(--muted); font-size:10px; font-weight:600; padding:3px 8px; border-radius:20px; }
+    .card-info { font-size:11px; color:var(--muted); margin-bottom:10px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+
+    .edit-input { width:100%; border:none; border-bottom:1px solid var(--gray2); background:transparent; margin-bottom:10px; font-size:16px; outline:none; font-family:'DM Sans',sans-serif; color:var(--text); padding:4px 0; transition:border-color 0.2s; }
+    .edit-input:focus { border-color:var(--orange); }
+
+    .file-wrap { background:white; border:1.5px dashed var(--gray2); border-radius:12px; padding:20px; text-align:center; margin-bottom:16px; cursor:pointer; transition:border-color 0.2s; }
+    .file-wrap:hover { border-color:var(--orange); }
+    .file-wrap input { display:none; }
+    .file-icon { font-size:28px; margin-bottom:6px; }
+    .file-text { font-size:13px; color:var(--muted); font-weight:500; }
+    .file-name { font-size:12px; color:var(--orange); font-weight:700; margin-top:6px; min-height:16px; }
+
+    .btn { width:100%; border:none; padding:13px; border-radius:10px; font-weight:700; font-size:12px; letter-spacing:1px; text-transform:uppercase; cursor:pointer; font-family:'DM Sans',sans-serif; transition:opacity 0.2s,transform 0.1s; margin-bottom:8px; }
+    .btn:active { transform:scale(0.98); opacity:0.85; }
+    .btn:last-child { margin-bottom:0; }
+    .btn-black { background:var(--black); color:white; }
+    .btn-wa { background:#25D366; color:white; }
+    .btn-green { background:var(--green); color:white; }
+    .btn-red { background:var(--red); color:white; }
+    .btn-gray { background:var(--gray); color:var(--muted); }
+    .btn-limpiar { width:100%; background:transparent; color:var(--muted); border:1px solid var(--gray2); padding:10px; border-radius:10px; font-weight:700; font-size:11px; letter-spacing:1px; text-transform:uppercase; cursor:pointer; margin-bottom:14px; font-family:'DM Sans',sans-serif; }
+
+    .progress-wrap { margin:10px 0 12px; }
+    .progress-label { display:flex; justify-content:space-between; font-size:10px; color:var(--muted); margin-bottom:5px; font-weight:600; }
+    .progress-bg { background:var(--gray); height:7px; border-radius:4px; overflow:hidden; }
+    .progress-fill { background:linear-gradient(90deg,var(--orange),#f0843c); height:100%; border-radius:4px; transition:width 0.4s ease; }
+
+    .badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:10px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; }
+    .badge-camino { background:var(--orange-light); color:var(--orange); }
+    .badge-entregado { background:rgba(39,174,96,0.12); color:var(--green); }
+    .badge-no { background:rgba(231,76,60,0.12); color:var(--red); }
+
+    .motivo-box { background:var(--gray); padding:10px; border-radius:10px; margin-top:4px; display:none; }
+    .motivo-box.visible { display:block; animation:fadeIn 0.2s ease; }
+    .motivo-input { width:100%; border:1.5px solid var(--gray2); background:white; border-radius:8px; padding:8px 10px; font-size:12px; outline:none; font-family:'DM Sans',sans-serif; margin-bottom:8px; transition:border-color 0.2s; }
+    .motivo-input:focus { border-color:var(--red); }
+
+    .dia-chip { display:inline-block; background:var(--orange); color:white; font-size:10px; font-weight:700; padding:3px 10px; border-radius:20px; margin-bottom:6px; }
+    .msg-preview { background:var(--gray); border-radius:8px; padding:8px 10px; font-size:11px; color:var(--muted); margin-bottom:10px; line-height:1.5; font-style:italic; }
+
+    .filtro-wrap { display:flex; gap:8px; margin-bottom:14px; overflow-x:auto; padding-bottom:4px; }
+    .filtro-btn { background:var(--gray); color:var(--muted); border:none; padding:7px 14px; border-radius:20px; font-size:11px; font-weight:700; cursor:pointer; white-space:nowrap; font-family:'DM Sans',sans-serif; transition:all 0.2s; }
+    .filtro-btn.active { background:var(--orange); color:white; }
+    .motivo-tag { background:rgba(231,76,60,0.08); color:var(--red); font-size:11px; padding:5px 10px; border-radius:6px; margin-top:6px; display:block; }
+    .fecha-text { font-size:10px; color:var(--muted); }
+    .divider { border:none; border-top:1px solid var(--gray2); margin:12px 0; }
+
+    .stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+    .stat-box { background:white; border-radius:12px; padding:14px; text-align:center; box-shadow:0 2px 8px rgba(0,0,0,0.05); border-top:3px solid var(--orange); }
+    .stat-box.green { border-top-color:var(--green); }
+    .stat-num { font-family:'Cormorant Garamond',serif; font-size:32px; font-weight:700; color:var(--orange); line-height:1; }
+    .stat-label { font-size:10px; color:var(--muted); font-weight:600; letter-spacing:1px; margin-top:4px; text-transform:uppercase; }
+    .chart-wrap { background:white; border-radius:14px; padding:16px; margin-bottom:14px; box-shadow:0 2px 12px rgba(0,0,0,0.06); }
+    .chart-title { font-family:'Cormorant Garamond',serif; font-size:18px; font-weight:600; margin-bottom:12px; color:var(--black); }
+
+    /* ANALÍTICA */
+    .mapa-wrap { background:white; border-radius:14px; padding:16px; margin-bottom:14px; box-shadow:0 2px 12px rgba(0,0,0,0.06); }
+    .depto-path { cursor:pointer; stroke:#fff; stroke-width:1.5; transition:opacity 0.2s; }
+    .depto-path:hover { opacity:0.8; }
+    .depto-tooltip { position:fixed; background:var(--black); color:white; padding:6px 12px; border-radius:8px; font-size:12px; font-weight:700; pointer-events:none; z-index:999; display:none; }
+    .ia-box { background:linear-gradient(135deg,#0D0D0D,#1a1a2e); border-radius:14px; padding:16px; margin-bottom:14px; color:white; }
+    .ia-title { font-family:'Cormorant Garamond',serif; font-size:18px; font-weight:700; color:var(--orange); margin-bottom:12px; }
+    .ia-tip { background:rgba(255,255,255,0.06); border-radius:10px; padding:10px 12px; margin-bottom:8px; font-size:12px; line-height:1.6; border-left:3px solid var(--orange); }
+    .ia-loading { color:#888; font-size:12px; text-align:center; padding:20px; }
+
+    .empty-state { text-align:center; padding:40px 20px; color:var(--muted); }
+    .empty-icon { font-size:40px; margin-bottom:10px; }
+    .empty-text { font-size:14px; font-weight:500; }
+
+    /* ADMIN PANEL */
+    .admin-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:1100; display:none; }
+    .admin-overlay.open { display:block; }
+    .admin-panel { position:fixed; top:0; right:0; width:95%; max-width:420px; height:100vh; background:var(--white); z-index:1200; transform:translateX(100%); transition:transform 0.3s cubic-bezier(.4,0,.2,1); display:flex; flex-direction:column; box-shadow:-4px 0 30px rgba(0,0,0,0.2); overflow-y:auto; }
+    .admin-panel.open { transform:translateX(0); }
+    .admin-header { background:var(--black); padding:16px 18px; display:flex; align-items:center; justify-content:space-between; border-bottom:3px solid var(--orange); flex-shrink:0; }
+    .admin-title { font-family:'Cormorant Garamond',serif; font-size:20px; font-weight:700; color:white; letter-spacing:1px; }
+    .admin-section { padding:16px; border-bottom:1px solid var(--gray2); }
+    .admin-section-title { font-family:'Cormorant Garamond',serif; font-size:17px; font-weight:600; color:var(--black); margin-bottom:12px; display:flex; align-items:center; gap:6px; }
+    .admin-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--gray); font-size:13px; }
+    .admin-row:last-child { border-bottom:none; }
+    .admin-input { width:100%; border:1.5px solid var(--gray2); border-radius:8px; padding:8px 10px; font-size:13px; outline:none; font-family:'DM Sans',sans-serif; margin-bottom:8px; transition:border-color 0.2s; }
+    .admin-input:focus { border-color:var(--orange); }
+    .admin-btn-sm { background:var(--black); color:white; border:none; padding:7px 14px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif; letter-spacing:0.5px; }
+    .admin-btn-red { background:var(--red); }
+    .admin-btn-green { background:var(--green); }
+    .tag-cod { background:rgba(231,76,60,0.1); color:var(--red); font-size:10px; font-weight:700; padding:2px 7px; border-radius:20px; }
+    .tag-std { background:rgba(226,98,42,0.1); color:var(--orange); font-size:10px; font-weight:700; padding:2px 7px; border-radius:20px; }
+
+    /* LOGIN ADMIN */
+    .admin-login { padding:30px 20px; display:flex; flex-direction:column; gap:12px; }
+    .admin-login-title { font-family:'Cormorant Garamond',serif; font-size:22px; font-weight:700; text-align:center; margin-bottom:8px; }
+    .admin-login-err { color:var(--red); font-size:12px; text-align:center; display:none; }
+
+    /* BOX FULL TRACKING TIMELINE */
+    .bf-wrap { margin:12px 0 8px; }
+    .bf-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+    .bf-title { font-size:10px; font-weight:700; color:var(--muted); letter-spacing:1.5px; text-transform:uppercase; }
+    .bf-refresh { background:none; border:none; cursor:pointer; font-size:13px; padding:2px 6px; border-radius:6px; color:var(--muted); transition:color 0.2s; }
+    .bf-refresh:hover { color:var(--orange); }
+    .bf-timeline { display:flex; flex-direction:column; gap:0; }
+    .bf-step { display:flex; align-items:flex-start; gap:10px; padding:8px 0; position:relative; }
+    .bf-step:not(:last-child)::after { content:''; position:absolute; left:12px; top:28px; bottom:-8px; width:2px; background:var(--gray2); }
+    .bf-step.done::after { background:var(--orange); opacity:0.4; }
+    .bf-dot { width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px; }
+    .bf-dot.done { background:#2563eb; }
+    .bf-dot.pending { background:#d1d5db; }
+    .bf-dot svg { width:13px; height:13px; fill:white; }
+    .bf-info { flex:1; }
+    .bf-step-title { font-weight:700; font-size:13px; color:var(--black); }
+    .bf-step-title.pending { color:#9ca3af; font-weight:500; }
+    .bf-step-date { font-size:11px; color:var(--muted); margin-top:1px; }
+    .bf-loading { text-align:center; padding:14px; color:var(--muted); font-size:12px; }
+    .bf-error { font-size:11px; color:var(--red); padding:6px 0; }
+    .bf-link { font-size:10px; color:var(--orange); text-decoration:none; font-weight:700; letter-spacing:0.5px; }
+
+    /* PANEL NOTIFICACIONES */
+    .notif-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+      z-index: 999; opacity: 0; pointer-events: none; transition: opacity 0.25s;
+    }
+    .notif-overlay.open { opacity: 1; pointer-events: all; }
+    .notif-panel {
+      position: fixed; top: 0; right: 0; width: 92%; max-width: 380px; height: 100vh;
+      background: var(--white); z-index: 1000; transform: translateX(100%);
+      transition: transform 0.3s cubic-bezier(.4,0,.2,1); display: flex; flex-direction: column;
+      box-shadow: -4px 0 30px rgba(0,0,0,0.15);
+    }
+    .notif-panel.open { transform: translateX(0); }
+    .notif-panel-header {
+      background: var(--black); padding: 16px 18px; display: flex;
+      align-items: center; justify-content: space-between;
+      border-bottom: 3px solid var(--orange); flex-shrink: 0;
+    }
+    .notif-panel-title {
+      font-family: 'Cormorant Garamond', serif; font-size: 20px;
+      font-weight: 700; color: white; letter-spacing: 1px;
+    }
+    .notif-close {
+      background: none; border: none; color: #888; font-size: 22px;
+      cursor: pointer; padding: 2px 6px; border-radius: 6px; transition: color 0.2s;
+    }
+    .notif-close:hover { color: white; }
+    .notif-count {
+      font-size: 11px; color: var(--orange); font-weight: 700;
+      letter-spacing: 1px; text-transform: uppercase; padding: 8px 18px 4px;
+      flex-shrink: 0;
+    }
+    .notif-list { flex: 1; overflow-y: auto; padding: 8px 12px 20px; }
+    .notif-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 13px 12px; border-radius: 12px; margin-bottom: 6px;
+      background: var(--bg); cursor: pointer; transition: background 0.2s;
+      border: 1px solid transparent; animation: fadeIn 0.2s ease both;
+    }
+    .notif-item:hover { background: var(--gray); border-color: var(--gray2); }
+    .notif-item:active { transform: scale(0.98); }
+    .notif-avatar {
+      width: 44px; height: 44px; border-radius: 50%; background: var(--orange);
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Cormorant Garamond', serif; font-size: 18px; font-weight: 700;
+      color: white; flex-shrink: 0;
+    }
+    .notif-info { flex: 1; min-width: 0; }
+    .notif-name { font-weight: 700; font-size: 14px; color: var(--black); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .notif-desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .notif-dia {
+      background: var(--orange-light); color: var(--orange);
+      font-size: 10px; font-weight: 700; padding: 3px 8px;
+      border-radius: 20px; white-space: nowrap; flex-shrink: 0;
+    }
+    .notif-empty { text-align: center; padding: 50px 20px; color: var(--muted); }
+    .notif-empty-icon { font-size: 36px; margin-bottom: 10px; }
+    .notif-empty-text { font-size: 13px; font-weight: 500; }
+  </style>
+
+  <script>
+    const CONFIG = {
+      apiKey: "AIzaSyCK6G6h0UzSLO2e57PZHbxUEOS2hAfnwbU",
+      authDomain: "eunoia-shop-hn.firebaseapp.com",
+      projectId: "eunoia-shop-hn",
+      storageBucket: "eunoia-shop-hn.firebasestorage.app",
+      messagingSenderId: "91297264195",
+      appId: "1:91297264195:web:4f1b742a2b8ccb0f82daf6"
+    };
+    if (!firebase.apps.length) firebase.initializeApp(CONFIG);
+    const db = firebase.firestore();
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    let temp = [], ventasChart = null, historialFiltro = 'todos';
+    let swReg = null, timerManana = null, timerTarde = null;
+    const EXCLUIR = ["89268080","96610202","22029400","22640024","20222024"];
+    const TRACKING = "https://tracking.goboxful.com?shipment=";
+
+    // ── PANEL NOTIFICACIONES INBOX ────────────────────────
+    let panelAbierto = false;
+
+    function toggleNotifPanel() {
+      if (!panelAbierto) {
+        abrirNotifPanel();
+      } else {
+        cerrarNotifPanel();
+      }
+    }
+
+    async function abrirNotifPanel() {
+      panelAbierto = true;
+      document.getElementById('notif-overlay').classList.add('open');
+      document.getElementById('notif-panel').classList.add('open');
+      await cargarNotifPanel();
+    }
+
+    function cerrarNotifPanel() {
+      panelAbierto = false;
+      document.getElementById('notif-overlay').classList.remove('open');
+      document.getElementById('notif-panel').classList.remove('open');
+    }
+
+    async function cargarNotifPanel() {
+      const listEl = document.getElementById('notif-panel-list');
+      const countEl = document.getElementById('notif-panel-count');
+      listEl.innerHTML = `<div style="text-align:center;padding:30px;color:var(--muted);font-size:13px;">Cargando...</div>`;
+      const snap = await db.collection("pedidos").where("estado","==","En Camino").get();
+      if (snap.empty) {
+        countEl.textContent = 'Sin envíos pendientes';
+        listEl.innerHTML = `<div class="notif-empty"><div class="notif-empty-icon">📭</div><div class="notif-empty-text">No hay envíos en camino</div></div>`;
+        return;
+      }
+      const docs = snap.docs.sort((a,b) => (a.data().fecha||0) - (b.data().fecha||0));
+      countEl.textContent = `${docs.length} envío${docs.length!==1?'s':''} en camino`;
+      listEl.innerHTML = docs.map(doc => {
+        const p = doc.data();
+        const dia = p.diaSeguimiento || 1;
+        const inicial = p.nombre.charAt(0).toUpperCase();
+        const fechaStr = p.fecha ? new Date(p.fecha).toLocaleDateString('es-HN',{day:'2-digit',month:'short'}) : '';
+        const guiaT = p.guiaTracking || p.guia;
+        return `
+        <div class="notif-item" onclick="enviarDesdePanel('${p.telefono}','${p.nombre}',${dia},'${doc.id}','${guiaT}',${p.esAgencia||false})">
+          <div class="notif-avatar">${inicial}</div>
+          <div class="notif-info">
+            <div class="notif-name">${p.nombre}</div>
+            <div class="notif-desc">📦 ${p.guia} · ${fechaStr}</div>
+          </div>
+          <span class="notif-dia">Día ${dia}</span>
+        </div>`;
+      }).join('');
+    }
+
+    async function enviarDesdePanel(tel, nom, dia, id, guiaT) {
+      const msg = getMensaje(dia, nom, guiaT, p?.esAgencia, p?.tipoAgencia);
+      const nextDia = Math.min(dia + 1, 12);
+      await db.collection("pedidos").doc(id).update({ diaSeguimiento: nextDia });
+      const waUrl2 = `https://wa.me/${tel}?text=${encodeURIComponent(msg)}`;
+      setTimeout(() => { window.location.href = waUrl2; }, 300);
+      cerrarNotifPanel();
+      // Actualizar el panel después de enviar
+      setTimeout(() => { if (panelAbierto) cargarNotifPanel(); }, 500);
+    }
+    async function registrarSW() {
+      if (!('serviceWorker' in navigator)) return;
+      try {
+        swReg = await navigator.serviceWorker.register('sw.js');
+        navigator.serviceWorker.addEventListener('message', e => {
+          if (e.data?.type === 'GO_SEGUIMIENTO') irA('p-s');
+        });
+      } catch(e) { console.log('SW no disponible:', e); }
+    }
+
+    // ── NOTIFICACIONES ────────────────────────────────────
+    async function iniciarNotificaciones() {
+      const statusEl = document.getElementById('notif-status');
+      statusEl.style.display = 'block';
+      if (!('Notification' in window)) {
+        statusEl.textContent = '⚠ Tu navegador no soporta notificaciones. Usa Safari en iPhone.';
+        statusEl.className = 'notif-status error'; return;
+      }
+      // En iPhone solo funciona si está instalada como PWA
+      const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      const isStandalone = window.navigator.standalone === true;
+      if (isIOS && !isStandalone) {
+        statusEl.textContent = '📱 En iPhone: agrega la app a tu pantalla de inicio primero, luego activa notificaciones.';
+        statusEl.className = 'notif-status error'; return;
+      }
+      let perm = Notification.permission;
+      if (perm === 'default') perm = await Notification.requestPermission();
+      if (perm !== 'granted') {
+        statusEl.textContent = '🔕 Permiso denegado. Actívalo en Ajustes → Safari → Notificaciones.';
+        statusEl.className = 'notif-status error';
+        document.getElementById('bell-dot').classList.remove('visible'); return;
+      }
+      statusEl.textContent = '🔔 Activo — recordatorios a las 9:00 AM, 10:00 AM y 2:30 PM';
+      statusEl.className = 'notif-status ok';
+      document.getElementById('bell-dot').classList.add('visible');
+      localStorage.setItem('notif_activas', '1');
+      setTimeout(() => { statusEl.style.display = 'none'; }, 4000);
+      programarAmbas();
+    }
+
+    function programarAmbas() {
+      programarTurno('manana', 9, 0);
+      programarTurno('tarde', 14, 30);
+      programarTurno('urgentes', 10, 0);
+    }
+
+    function programarTurno(turno, hora, min) {
+      // Honduras = UTC-6
+      const ahora = new Date();
+      const objetivo = new Date(ahora);
+      objetivo.setHours(hora, min, 0, 0);
+      if (ahora >= objetivo) objetivo.setDate(objetivo.getDate() + 1);
+      const ms = objetivo - ahora;
+      const timer = setTimeout(async () => {
+        await dispararNotif(turno);
+        setInterval(() => dispararNotif(turno), 24 * 60 * 60 * 1000);
+      }, ms);
+      if (turno === 'manana') timerManana = timer;
+      else timerTarde = timer;
+    }
+
+    async function dispararNotif(turno) {
+      if (Notification.permission !== 'granted') return;
+      const snap = await db.collection("pedidos").where("estado","==","En Camino").get();
+      if (snap.empty) return;
+
+      if (turno === 'urgentes') {
+        // Ordenar por fecha más antigua primero
+        const docs = snap.docs.sort((a,b) => (a.data().fecha||0) - (b.data().fecha||0));
+        const count = docs.length;
+        const masViejo = docs[0].data();
+        const diasViejo = Math.floor((Date.now() - (masViejo.fecha||0)) / 86400000);
+        const lines = docs.slice(0,3).map(d => {
+          const p = d.data();
+          const dias = Math.floor((Date.now() - (p.fecha||0)) / 86400000);
+          return `${p.nombre.split(' ')[0]} — ${dias} día${dias!==1?'s':''}`;
+        }).join('\n');
+        const n = new Notification(`🚨 Eunoia Shop — ${count} en camino`, {
+          body: lines + (count > 3 ? `\n...y ${count-3} más` : ''),
+          tag: 'urgentes', renotify: true
+        });
+        n.onclick = () => { window.focus(); irA('p-s'); n.close(); };
+        return;
+      }
+
+      const nombres = snap.docs.map(d => d.data().nombre.split(' ')[0]);
+      const count = nombres.length;
+      if (swReg?.active) {
+        swReg.active.postMessage({ type: 'NOTIF', nombres, count, turno });
+      } else {
+        const hora = turno === 'manana' ? '9:00 AM' : '2:30 PM';
+        const body = count === 1 ? `Escríbele a ${nombres[0]}` : `${nombres.slice(0,2).join(', ')}${count>2?` y ${count-2} más`:''}`;
+        const n = new Notification(`Eunoia Shop 📦 — ${count} pendiente${count!==1?'s':''}`, {
+          body: body + ` (${hora})`, tag: 'seg-'+turno, renotify: true
+        });
+        n.onclick = () => { window.focus(); irA('p-s'); n.close(); };
+      }
+    }
+
+    // ── MENSAJES DÍA A DÍA ───────────────────────────────
+    function getMensaje(dia, nombre, guia, esAgencia, tipoAgencia) {
+      const nombreAgencia = tipoAgencia === 'Forza' ? 'Agencia Forza' : tipoAgencia === 'CAEX' ? 'Agencia Cargo Expreso' : 'la agencia';
+      const link = TRACKING + guia;
+      const n = nombre.split(' ')[0];
+      const nc = n.charAt(0).toUpperCase() + n.slice(1).toLowerCase();
+
+      if (esAgencia) {
+        const msgs = [
+          `¡Buen día ${nc}! 👋 Su pedido ya fue despachado con guía *${guia}*.\n\nPuede rastrear su paquete aquí:\n${link}\n\nEstaremos pendientes. 🛍️`,
+          `¡Buen día ${nc}! ¿Ya pudo reclamar su paquete en ${nombreAgencia}?`,
+          `¡Buen día ${nc}! ¿Ya está disponible su paquete en ${nombreAgencia}?`,
+          `¡Buen día ${nc}! ¿Tiene alguna novedad sobre su paquete en ${nombreAgencia}?`,
+          `¡Buen día ${nc}! ¿Ya pudo pasar a recoger su pedido?`,
+          `¡Buen día ${nc}! ¿Ya le avisaron que su paquete está listo en ${nombreAgencia}?`,
+          `¡Buen día ${nc}! ¿Hubo algún inconveniente para recoger su paquete en ${nombreAgencia}?`,
+          `¡Buen día ${nc}! ¿Pudo coordinar la recogida de su pedido en ${nombreAgencia}?`,
+          `¡Buen día ${nc}! ¿Su paquete sigue en ${nombreAgencia} o ya lo recogió?`,
+          `¡Buen día ${nc}! ¿Ya tiene su pedido en sus manos?`,
+          `¡Buen día ${nc}! ¿Necesita ayuda para coordinar la recogida de su paquete?`,
+          `¡Buen día ${nc}! ¿Ya recogió su paquete o aún está en ${nombreAgencia}?`,
+          `¡Buen día ${nc}! Este es nuestro último seguimiento. ¿Ya recogió su pedido en ${nombreAgencia}? Si no, por favor avísenos para ayudarle. 🧡`
+        ];
+        return msgs[Math.min(dia, 12)];
+      }
+
+      const msgs = [
+        `¡Buen día ${nc}! 👋 Su pedido ya fue despachado con guía *${guia}*.\n\nPuede rastrear su paquete aquí:\n${link}\n\nEstaremos pendientes. 🛍️`,
+        `¡Buen día ${nc}! ¿Ya le entregaron su paquete?`,
+        `¡Buen día ${nc}! ¿Ya le llamaron de la agencia de envíos para coordinar su entrega?`,
+        `¡Buen día ${nc}! ¿Tiene alguna novedad sobre su pedido?`,
+        `¡Buen día ${nc}! ¿Ya tiene su paquete en mano?`,
+        `¡Buen día ${nc}! ¿Ya pasaron a dejarle su pedido?`,
+        `¡Buen día ${nc}! ¿Hubo algún inconveniente con la entrega de su paquete?`,
+        `¡Buen día ${nc}! ¿Le han dado alguna fecha para la entrega de su pedido?`,
+        `¡Buen día ${nc}! ¿Pudieron comunicarse con usted de la agencia de envíos?`,
+        `¡Buen día ${nc}! ¿Su pedido ya llegó a sus manos?`,
+        `¡Buen día ${nc}! ¿Tiene alguna novedad o necesita ayuda con algo?`,
+        `¡Buen día ${nc}! ¿Ya recibió su paquete o aún está pendiente?`,
+        `¡Buen día ${nc}! Este es nuestro último seguimiento. ¿Ya recibió su pedido? Si no es así, por favor avísenos para ayudarle. 🧡`
+      ];
+      return msgs[Math.min(dia, 12)];
+    }
+
+    // ── PDF ───────────────────────────────────────────────
+    async function leerPDF(f) {
+      if (!f) return;
+      document.getElementById('file-name').textContent = f.name;
+      const r = new FileReader();
+      r.onload = async function() {
+        const pdf = await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
+        temp = [];
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const items = content.items.map(s => s.str.trim()).filter(s => s !== "");
+          const fullText = items.join(' ');
+          let guia = fullText.match(/(BH\d{7,15}(?:-\d)?|FD\d{7,15}(?:-\d)?)/i)?.[0] || "S/G";
+          let guiaTracking = guia;
+          let nom = "CLIENTE", tel = "";
+          if (guia.toUpperCase().startsWith("BH")) {
+            guiaTracking = guia;
+            let idxDest = items.findIndex(t => /^destinatario\s*:?\s*$/i.test(t));
+            if (idxDest !== -1 && idxDest >= 3) nom = items[idxDest - 3] || "CLIENTE";
+            const EXCLUIR_BH = ["89268080","96610202","22029400","22640024","20222024","26204706"];
+            const guiaDigits = guia.replace(/\D/g,'');
+            const todosNum = [...fullText.matchAll(/(\d{8,})/g)].map(m => m[1]);
+            tel = todosNum.find(n => {
+              if (EXCLUIR_BH.some(ex => ex === n.slice(-8))) return false;
+              if (guiaDigits.includes(n)) return false;
+              return true;
+            })?.slice(-8) || "";
+          } else {
+            guiaTracking = guia.replace(/-\d$/, '');
+            let idxTel = items.findIndex(t => t.includes("Tel.:") && !EXCLUIR.some(e => t.includes(e)));
+            if (idxTel !== -1) {
+              nom = items[idxTel - 1];
+              let matchTel = items[idxTel].match(/\d{8,}/);
+              if (matchTel) tel = matchTel[0].slice(-8);
+            }
+          }
+          // Extraer servicio (COD/STD) y contenido
+          let servicio = '';
+          let contenido = '';
+          if (guia.toUpperCase().startsWith("FD")) {
+            const svcMatch = fullText.match(/Servicio\s+(COD|STD|EXP|DOM|[A-Z]{2,6})/i);
+            if (svcMatch) servicio = svcMatch[1].toUpperCase();
+            const contMatch = fullText.match(/Contenido:\s*([^\n\r]{3,60}?)(?=\s*Ref:|\s*Forma Pago|\s*$)/i);
+            if (contMatch) contenido = contMatch[1].trim();
+          } else if (guia.toUpperCase().startsWith("BH")) {
+            if (/\bCOD\b/.test(fullText)) servicio = 'COD';
+            else if (/\bSTD\b/.test(fullText)) servicio = 'STD';
+          }
+          // Detectar tipo de agencia
+          const esAgenciaForza = /agencia\s*forza/i.test(fullText);
+          const esAgenciaCaex = /agencia\s*(caex|cargo\s*expreso|cargo-expreso)/i.test(fullText);
+          const esAgencia = esAgenciaForza || esAgenciaCaex;
+          const tipoAgencia = esAgenciaForza ? 'Forza' : esAgenciaCaex ? 'CAEX' : '';
+          if (guia !== "S/G") temp.push({ nom: nom.toUpperCase(), tel, guia, guiaTracking, servicio, contenido, esAgencia, tipoAgencia });
+        }
+        renderDespacho();
+      };
+      r.readAsArrayBuffer(f);
+    }
+
+    function renderDespacho() {
+      const list = document.getElementById('list-c');
+      if (temp.length === 0) {
+        list.innerHTML = `<div class="empty-state"><div class="empty-icon">📄</div><div class="empty-text">No se encontraron guías</div></div>`;
+        return;
+      }
+      // Pendientes primero, enviadas al final
+      const ordenados = [...temp.map((p,i) => ({...p, _i:i}))].sort((a,b) => {
+        if (a.enviada && !b.enviada) return 1;
+        if (!a.enviada && b.enviada) return -1;
+        return 0;
+      });
+      const pendientes = ordenados.filter(p => !p.enviada).length;
+      list.innerHTML = `<button class="btn-limpiar" onclick="temp=[];document.getElementById('file-name').textContent='';renderDespacho()">✕ Limpiar vista previa</button>` +
+        (pendientes < ordenados.length ? `<div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:10px;font-weight:600;">${pendientes} pendiente${pendientes!==1?'s':''} · ${ordenados.length - pendientes} enviada${(ordenados.length-pendientes)!==1?'s':''}</div>` : '') +
+        ordenados.map((p) => `
+          <div class="card" style="${p.enviada ? 'opacity:0.6;border-left-color:var(--green);' : ''}">
+            ${p.enviada ? '<div style="font-size:10px;color:var(--green);font-weight:700;margin-bottom:8px;">✓ Enviada</div>' : ''}
+            <div class="card-label">Cliente</div>
+            <input type="text" id="n-${p._i}" value="${p.nom}" class="edit-input" style="font-weight:700;font-size:18px;" ${p.enviada ? 'disabled' : ''}>
+            <div class="card-label">WhatsApp</div>
+            <input type="text" id="t-${p._i}" value="${p.tel}" class="edit-input" style="color:#25D366;font-size:15px;" ${p.enviada ? 'disabled' : ''}>
+            <div class="card-info">
+              <span class="guia-badge">${p.guia}</span>
+              ${p.servicio ? `<span class="badge ${p.servicio==='COD'?'badge-no':'badge-camino'}" style="font-size:10px;">${p.servicio}</span>` : ''}
+            </div>
+            ${p.contenido ? `<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">📦 ${p.contenido}</div>` : ''}
+            ${!p.enviada ? `<button class="btn btn-black" onclick="guardarEnvio(${p._i})">📦 Registrar y enviar guía</button>` : ''}
+          </div>`).join('');
+    }
+
+    async function guardarEnvio(i) {
+      const n = document.getElementById(`n-${i}`).value.trim();
+      const t = document.getElementById(`t-${i}`).value.trim();
+      if (!t) { alert("Ingresa el número de WhatsApp antes de registrar."); return; }
+      const telFull = t.startsWith("504") ? t : "504" + t;
+      const guia = temp[i].guia, guiaTracking = temp[i].guiaTracking;
+      const msg = getMensaje(0, n, guiaTracking, temp[i].esAgencia, temp[i].tipoAgencia);
+      await db.collection("pedidos").add({
+        nombre: n.toUpperCase(), telefono: telFull, guia, guiaTracking,
+        servicio: temp[i].servicio || '', contenido: temp[i].contenido || '',
+        esAgencia: temp[i].esAgencia || false,
+        tipoAgencia: temp[i].tipoAgencia || '',
+        diaSeguimiento: 1, fecha: Date.now(), estado: 'En Camino',
+        enviadoHoy: false
+      });
+      // Marcar como enviada y re-renderizar
+      temp[i].enviada = true;
+      renderDespacho();
+      const waUrl3 = `https://wa.me/${telFull}?text=${encodeURIComponent(msg)}`;
+      setTimeout(() => { window.location.href = waUrl3; }, 300);
+    }
+
+    // ── BOX FULL TRACKING ─────────────────────────────────
+    async function cargarBoxFull(guiaTracking, containerId, docId) {
+      const el = document.getElementById(containerId);
+      if (!el) return;
+      el.innerHTML = `<div class="bf-loading">⏳ Consultando Box Full...</div>`;
+      try {
+        const res = await fetch(`/.netlify/functions/boxful?shipment=${guiaTracking}`);
+        const data = await res.json();
+        if (!res.ok || !data.steps || data.steps.length === 0) {
+          el.innerHTML = `<div class="bf-error">No se pudo obtener estado. <a class="bf-link" href="https://tracking.goboxful.com?shipment=${guiaTracking}" target="_blank">Ver en Box Full →</a></div>`;
+          return;
+        }
+        // Actualizar badge con último estado completado de Box Full
+        if (docId) {
+          const badge = document.getElementById(`badge-${docId}`);
+          if (badge) {
+            const completados = data.steps.filter(s => s.done);
+            if (completados.length > 0) {
+              const ultimo = completados[completados.length - 1];
+              badge.textContent = ultimo.title;
+              if (/entregado/i.test(ultimo.title)) {
+                badge.className = 'badge badge-entregado';
+              } else if (/ruta/i.test(ultimo.title)) {
+                badge.style.cssText = '';
+                badge.className = 'badge';
+                badge.style.background = 'rgba(37,99,235,0.12)';
+                badge.style.color = '#2563eb';
+              } else {
+                badge.className = 'badge badge-camino';
+              }
+            }
+          }
+        }
+        // Auto-marcar entregado si Box Full dice Entregado
+        if (docId) {
+          const entregado = data.steps.find(s => /entregado/i.test(s.title) && s.done);
+          if (entregado) {
+            db.collection("pedidos").doc(docId).update({
+              estado: 'Entregado',
+              fechaCierre: Date.now(),
+              entregadoAutoBoxFull: true
+            });
+            return; // La tarjeta desaparece sola por el listener
+          }
+        }
+        el.innerHTML = renderBoxFullTimeline(data.steps, guiaTracking, data.fechaEstimada, data.paqueteria);
+      } catch(e) {
+        el.innerHTML = `<div class="bf-error">Sin conexión con Box Full. <a class="bf-link" href="https://tracking.goboxful.com?shipment=${guiaTracking}" target="_blank">Ver aquí →</a></div>`;
+      }
+    }
+
+    function renderBoxFullTimeline(steps, guiaTracking, fechaEstimada, paqueteria) {
+      // Colores fijos por tipo de paso (independiente de done/pending)
+      const PASO_COLOR = {
+        'creado':     '#6366f1', // morado
+        'registrado': '#f59e0b', // amarillo
+        'recolect':   '#3b82f6', // azul
+        'ruta':       '#E2622A', // naranja
+        'entreg':     '#27ae60'  // verde
+      };
+      const getColor = (title) => {
+        const t = title.toLowerCase();
+        for (const [key, color] of Object.entries(PASO_COLOR)) {
+          if (t.includes(key)) return color;
+        }
+        return '#aaa';
+      };
+      const svgArrow = `<svg viewBox="0 0 24 24"><path d="M12 4v12M6 11l6 6 6-6" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
+      const svgCheck = `<svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
+      const metaHtml = (fechaEstimada || paqueteria) ? `
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+          ${paqueteria ? `<div style="background:rgba(37,99,235,0.08);border-radius:8px;padding:6px 10px;font-size:11px;display:flex;align-items:center;gap:5px;"><span style="font-size:16px;">🚚</span><span style="font-weight:700;color:#2563eb;">${paqueteria}</span></div>` : ''}
+          ${fechaEstimada ? `<div style="background:rgba(226,98,42,0.1);border-radius:8px;padding:6px 10px;font-size:11px;"><span style="color:var(--muted);font-weight:600;display:block;">📅 Entrega estimada</span><span style="font-weight:700;color:var(--orange);">${fechaEstimada}</span></div>` : ''}
+        </div>` : '';
+      const stepsHtml = steps.map(s => {
+        const color = getColor(s.title);
+        const isEntregado = /entreg/i.test(s.title);
+        const icon = (s.done && isEntregado) ? svgCheck : svgArrow;
+        // Si está pendiente: fondo gris, borde del color. Si está hecho: fondo del color
+        const dotStyle = s.done
+          ? `background:${color};`
+          : `background:#e0e0e0;border:2px solid ${color};`;
+        const titleStyle = s.done ? `color:${color};font-weight:700;` : `color:#9ca3af;`;
+        return `
+        <div class="bf-step ${s.done ? 'done' : 'pending'}">
+          <div class="bf-dot" style="${dotStyle}">${s.done ? icon : `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="${color}"/></svg>`}</div>
+          <div class="bf-info">
+            <div class="bf-step-title" style="${titleStyle}">${s.title}</div>
+            <div class="bf-step-date" style="${s.done ? '' : 'color:#bbb;'}">${s.date}</div>
+          </div>
+        </div>`;
+      }).join('');
+      return `
+        ${metaHtml}
+        <div class="bf-timeline">${stepsHtml}</div>
+        <div style="margin-top:8px;">
+          <a class="bf-link" href="https://tracking.goboxful.com?shipment=${guiaTracking}" target="_blank">↗ Ver en Box Full</a>
+        </div>`;
+    }
+
+    // ── SEGUIMIENTO ───────────────────────────────────────
+    function cargarSeguimiento() {
+      db.collection("pedidos").where("estado","==","En Camino").onSnapshot(async snap => {
+        const el = document.getElementById('list-s');
+        if (snap.empty) {
+          el.innerHTML = `<div class="empty-state"><div class="empty-icon">🚚</div><div class="empty-text">No hay envíos en camino</div></div>`;
+          return;
+        }
+        // Obtener historial para detectar clientes frecuentes
+        const histSnap = await db.collection("pedidos").where("estado","in",["Entregado","No Entregado"]).get();
+        const nombresHistorial = histSnap.docs.map(d => d.data().nombre.trim().toUpperCase());
+        // Ordenar: no enviados hoy primero, enviados hoy al final
+        const hoy = new Date().toDateString();
+        const docs = snap.docs.map(doc => {
+          const d = doc.data();
+          // Resetear enviadoHoy si es de otro día
+          if (d.enviadoHoy && d.fechaEnvioHoy !== hoy) {
+            db.collection("pedidos").doc(doc.id).update({ enviadoHoy: false, fechaEnvioHoy: '' });
+          }
+          return doc;
+        }).sort((a, b) => {
+          const aEnv = a.data().enviadoHoy && a.data().fechaEnvioHoy === hoy;
+          const bEnv = b.data().enviadoHoy && b.data().fechaEnvioHoy === hoy;
+          if (aEnv && !bEnv) return 1;
+          if (!aEnv && bEnv) return -1;
+          return (a.data().fecha || 0) - (b.data().fecha || 0);
+        });
+        el.innerHTML = docs.map(doc => {
+          const p = doc.data();
+          const dia = p.diaSeguimiento || 1;
+          const guiaT = p.guiaTracking || p.guia;
+          const msgPrev = getMensaje(dia, p.nombre, guiaT, p.esAgencia, p.tipoAgencia);
+          const fechaStr = p.fecha ? new Date(p.fecha).toLocaleDateString('es-HN',{day:'2-digit',month:'short'}) : '';
+          const pct = Math.round((dia/12)*100);
+          const bfId = `bf-${doc.id}`;
+          const esFrecuente = nombresHistorial.includes(p.nombre.trim().toUpperCase());
+          return `
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+              <div>
+                <div style="font-weight:700;font-size:17px;">${p.nombre} ${esFrecuente ? '<span title="Cliente frecuente" style="font-size:15px;">⭐</span>' : ''}</div>
+                <div class="card-info" style="margin-top:4px;margin-bottom:0;">
+                  <span class="guia-badge">${p.guia}</span>
+                  ${p.servicio ? `<span class="badge ${p.servicio==='COD'?'badge-no':'badge-camino'}" style="font-size:9px;padding:2px 7px;">${p.servicio}</span>` : ''}
+                  ${p.esAgencia ? `<span class="badge" style="font-size:9px;padding:2px 7px;background:rgba(139,92,246,0.12);color:#7c3aed;">🏪 Agencia</span>` : ''}
+                  <a href="tel:+${p.telefono}" style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--muted);text-decoration:none;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.22 1.18 2 2 0 012.18 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.09a16 16 0 006 6l.56-.56a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 14.92z"/></svg>
+                    ${p.telefono}
+                  </a>
+                </div>
+                ${p.enviadoHoy ? '<div style="font-size:10px;color:var(--green);font-weight:700;margin-top:3px;">✓ Enviado hoy</div>' : ''}
+              </div>
+              <div style="text-align:right;">
+                <span class="badge badge-camino" id="badge-${doc.id}">En camino</span>
+                <div class="fecha-text" style="margin-top:4px;">${fechaStr}</div>
+              </div>
+            </div>
+            <div class="bf-wrap">
+              <div class="bf-header">
+                <span class="bf-title">📦 Estado Box Full</span>
+                <button class="bf-refresh" onclick="cargarBoxFull('${guiaT}','${bfId}')" title="Actualizar">↻</button>
+              </div>
+              <div id="${bfId}"><div class="bf-loading">Cargando...</div></div>
+            </div>
+            <div class="divider"></div>
+            <div class="progress-wrap">
+              <div class="progress-label"><span>Seguimiento día ${dia} / 12</span><span>${pct}%</span></div>
+              <div class="progress-bg"><div class="progress-fill" style="width:${pct}%"></div></div>
+              ${(() => {
+                let hist = '';
+                for (let d = 1; d < dia; d++) {
+                  const fecha = p[`historial_dia_${d}`];
+                  if (fecha) hist += `<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);padding:2px 0;"><span>Día ${d}</span><span style="color:var(--green);font-weight:600;">${fecha}</span></div>`;
+                }
+                return hist ? `<div style="margin-top:8px;border-top:1px solid var(--gray2);padding-top:6px;">${hist}</div>` : '';
+              })()}
+            </div>
+            <span class="dia-chip">Mensaje Día ${dia}</span>
+            <div class="msg-preview">"${msgPrev.substring(0,130)}${msgPrev.length>130?'…':''}"</div>
+            <button class="btn btn-wa" onclick="abrirWA('${p.telefono}','${p.nombre}',${dia},'${doc.id}','${guiaT}',${p.esAgencia||false})">
+              📲 Enviar seguimiento día ${dia}
+            </button>
+
+            <button class="btn btn-green" onclick="cambiarEstado('${doc.id}','Entregado')">✓ Marcar entregado</button>
+            <button class="btn btn-gray" onclick="toggleMotivo('${doc.id}')">✗ No entregado</button>
+            <div class="motivo-box" id="mbox-${doc.id}">
+              <input class="motivo-input" id="mot-${doc.id}" placeholder="Escribe el motivo de no entrega...">
+              <button class="btn btn-red" style="margin-bottom:0;" onclick="marcarNoEntregado('${doc.id}')">Confirmar no entregado</button>
+            </div>
+          </div>`;
+        }).join('');
+        // Cargar Box Full para cada envío
+        docs.forEach(doc => {
+          const p = doc.data();
+          const guiaT = p.guiaTracking || p.guia;
+          if (guiaT) cargarBoxFull(guiaT, `bf-${doc.id}`, doc.id);
+        });
+      });
+    }
+
+    // Auto-actualización cada 5 minutos
+    setInterval(() => {
+      if (document.getElementById('p-s')?.classList.contains('active')) {
+        document.querySelectorAll('[id^="bf-"]').forEach(el => {
+          const docId = el.id.replace('bf-','');
+          const guiaEl = el.closest('.card')?.querySelector('.guia-badge');
+          if (guiaEl) {
+            const guia = guiaEl.textContent.trim();
+            cargarBoxFull(guia, el.id, docId);
+          }
+        });
+      }
+    }, 5 * 60 * 1000);
+
+    // ── BÚSQUEDA SEGUIMIENTO ─────────────────────────────
+    function filtrarSeguimiento() {
+      const q = document.getElementById('buscar-s')?.value.toLowerCase() || '';
+      document.querySelectorAll('#list-s .card').forEach(card => {
+        const txt = card.textContent.toLowerCase();
+        card.style.display = txt.includes(q) ? '' : 'none';
+      });
+    }
+
+    // ── BÚSQUEDA HISTORIAL ────────────────────────────────
+    function filtrarHistorial() {
+      const q = document.getElementById('buscar-h')?.value.toLowerCase() || '';
+      const fecha = document.getElementById('filtro-fecha-h')?.value || '';
+      document.querySelectorAll('#list-h .card').forEach(card => {
+        const txt = card.textContent.toLowerCase();
+        const matchQ = txt.includes(q);
+        const matchF = !fecha || card.dataset.fecha === fecha;
+        card.style.display = (matchQ && matchF) ? '' : 'none';
+      });
+    }
+
+    function toggleMotivo(id) {
+      const box = document.getElementById(`mbox-${id}`);
+      box.classList.toggle('visible');
+      if (box.classList.contains('visible')) document.getElementById(`mot-${id}`).focus();
+    }
+
+    async function abrirWA(tel, nom, dia, id, guiaT, esAgencia) {
+      const msg = getMensaje(dia, nom, guiaT, esAgencia);
+      const ahora = new Date();
+      const fechaHora = ahora.toLocaleDateString('es-HN',{day:'2-digit',month:'short'}) + ' ' + ahora.toLocaleTimeString('es-HN',{hour:'2-digit',minute:'2-digit'});
+      const histKey = `historial_dia_${dia}`;
+      await db.collection("pedidos").doc(id).update({
+        diaSeguimiento: Math.min(dia+1,12),
+        enviadoHoy: true,
+        fechaEnvioHoy: new Date().toDateString(),
+        [histKey]: fechaHora
+      });
+      const waUrl = `https://wa.me/${tel}?text=${encodeURIComponent(msg)}`;
+      setTimeout(() => { window.location.href = waUrl; }, 300);
+    }
+
+    async function marcarNoEntregado(id) {
+      const mot = document.getElementById(`mot-${id}`).value.trim();
+      if (!mot) { alert("Escribe el motivo de no entrega."); return; }
+      await db.collection("pedidos").doc(id).update({ estado:'No Entregado', motivo:mot, fechaCierre:Date.now() });
+    }
+
+    async function cambiarEstado(id, est) {
+      await db.collection("pedidos").doc(id).update({ estado:est, fechaCierre:Date.now() });
+    }
+
+    // ── HISTORIAL ─────────────────────────────────────────
+    function cargarHistorial(filtro) {
+      historialFiltro = filtro || historialFiltro;
+      document.querySelectorAll('.filtro-btn').forEach(b => b.classList.remove('active'));
+      const ab = document.querySelector(`[data-filtro="${historialFiltro}"]`);
+      if (ab) ab.classList.add('active');
+      let q = db.collection("pedidos");
+      if (historialFiltro === 'entregado') q = q.where("estado","==","Entregado");
+      else if (historialFiltro === 'no') q = q.where("estado","==","No Entregado");
+      else q = q.where("estado","in",["Entregado","No Entregado"]);
+      q.onSnapshot(snap => {
+        const el = document.getElementById('list-h');
+        if (snap.empty) { el.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">No hay registros aquí</div></div>`; return; }
+        // Ordenar por fecha más reciente primero
+        const docs = snap.docs.sort((a,b) => (b.data().fechaCierre||b.data().fecha||0) - (a.data().fechaCierre||a.data().fecha||0));
+        // Agrupar por fecha
+        const grupos = {};
+        docs.forEach(doc => {
+          const p = doc.data();
+          const ts = p.fechaCierre || p.fecha;
+          const fechaKey = ts ? new Date(ts).toLocaleDateString('es-HN',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}) : 'Sin fecha';
+          const fechaISO = ts ? new Date(ts).toISOString().split('T')[0] : '';
+          if (!grupos[fechaISO]) grupos[fechaISO] = { label: fechaKey, docs: [] };
+          grupos[fechaISO].docs.push({ doc, fechaISO });
+        });
+        el.innerHTML = Object.entries(grupos).sort((a,b) => b[0].localeCompare(a[0])).map(([fechaISO, grupo]) => {
+          const cardsHtml = grupo.docs.map(({ doc, fechaISO }) => {
+            const p = doc.data(), es = p.estado === 'Entregado';
+            return `
+            <div class="card" data-fecha="${fechaISO}" style="border-left-color:${es?'var(--green)':'var(--red)'};margin-bottom:8px;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+                <div>
+                  <div style="font-weight:700;font-size:16px;">${p.nombre}</div>
+                  <div class="card-info" style="margin-top:4px;margin-bottom:0;">
+                    <span class="guia-badge">${p.guia}</span>
+                    ${p.servicio ? `<span class="badge ${p.servicio==='COD'?'badge-no':'badge-camino'}" style="font-size:9px;padding:2px 7px;">${p.servicio}</span>` : ''}
+                  </div>
+                </div>
+                <span class="badge ${es?'badge-entregado':'badge-no'}">${p.estado}</span>
+              </div>
+              ${!es && p.motivo ? `<span class="motivo-tag">Motivo: ${p.motivo}</span>` : ''}
+              <div class="divider"></div>
+              <button class="btn btn-red" style="padding:9px;font-size:10px;margin-bottom:0;" onclick="eliminarPedido('${doc.id}')">🗑 Eliminar</button>
+            </div>`;
+          }).join('');
+          return `
+          <div style="margin-bottom:6px;">
+            <div style="font-family:'Cormorant Garamond',serif;font-size:15px;font-weight:700;color:var(--orange);padding:8px 4px;border-bottom:2px solid var(--orange-light);margin-bottom:8px;text-transform:capitalize;">📅 ${grupo.label}</div>
+            ${cardsHtml}
+          </div>`;
+        }).join('');
+      });
+    }
+
+    async function eliminarPedido(id) {
+      if (!confirm("¿Eliminar este registro permanentemente?")) return;
+      await db.collection("pedidos").doc(id).delete();
+    }
+
+    // ── ANALÍTICA CON MES ────────────────────────────────
+    let todosLosPedidos = [];
+    let mesOffset = 0; // 0 = mes actual, -1 = anterior, etc.
+    let deptoChart = null;
+
+    const DEPTO_COLORS_LIST = ['#E2622A', '#6366f1', '#f59e0b', '#3b82f6', '#27ae60', '#ec4899', '#14b8a6', '#f97316', '#8b5cf6', '#06b6d4', '#84cc16', '#ef4444', '#a855f7', '#0ea5e9', '#d97706', '#10b981', '#f43f5e', '#64748b'];
+
+    function cambiarMesAnalítica(delta) {
+      mesOffset += delta;
+      // No permitir ir más allá del mes actual
+      if (mesOffset > 0) { mesOffset = 0; return; }
+      actualizarAnaliticaMes();
+    }
+
+    function getMesActual() {
+      const ahora = new Date();
+      return new Date(ahora.getFullYear(), ahora.getMonth() + mesOffset, 1);
+    }
+
+    function cargarVentas() {
+      db.collection("pedidos").where("estado","==","Entregado").onSnapshot(snap => {
+        todosLosPedidos = snap.docs.map(doc => doc.data());
+        const total = snap.size;
+        document.getElementById('stat-total').textContent = total;
+
+        // Gráfica histórica 6 meses
+        const ahora = new Date();
+        const meses = [];
+        for (let i = 5; i >= 0; i--) {
+          const d = new Date(ahora.getFullYear(), ahora.getMonth()-i, 1);
+          meses.push({ label: d.toLocaleDateString('es-HN',{month:'short',year:'2-digit'}), year:d.getFullYear(), month:d.getMonth(), count:0 });
+        }
+        todosLosPedidos.forEach(p => {
+          const ts = p.fechaCierre || p.fecha;
+          if (!ts) return;
+          const d = new Date(ts), m = meses.find(x => x.year===d.getFullYear() && x.month===d.getMonth());
+          if (m) m.count++;
+        });
+        const ctx = document.getElementById('ventasChart').getContext('2d');
+        if (ventasChart) ventasChart.destroy();
+        ventasChart = new Chart(ctx, {
+          type:'bar',
+          data:{ labels:meses.map(m=>m.label), datasets:[{ data:meses.map(m=>m.count), backgroundColor:'rgba(226,98,42,0.7)', borderColor:'#E2622A', borderWidth:2, borderRadius:6 }] },
+          options:{ responsive:true, plugins:{ legend:{display:false} }, scales:{ y:{ beginAtZero:true, ticks:{font:{family:'DM Sans',size:11}} }, x:{ticks:{font:{family:'DM Sans',size:11}}} } }
+        });
+
+        actualizarAnaliticaMes();
+      });
+    }
+
+    function actualizarAnaliticaMes() {
+      const mesDate = getMesActual();
+      const year = mesDate.getFullYear();
+      const month = mesDate.getMonth();
+      const label = mesDate.toLocaleDateString('es-HN', {month:'long', year:'numeric'});
+      document.getElementById('mes-label-analitica').textContent = label;
+
+      // Filtrar pedidos del mes
+      const pedidosMes = todosLosPedidos.filter(p => {
+        const ts = p.fechaCierre || p.fecha;
+        if (!ts) return false;
+        const d = new Date(ts);
+        return d.getFullYear() === year && d.getMonth() === month;
+      });
+
+      // Mes anterior para comparación
+      const mesAnt = new Date(year, month - 1, 1);
+      const pedidosAnt = todosLosPedidos.filter(p => {
+        const ts = p.fechaCierre || p.fecha;
+        if (!ts) return false;
+        const d = new Date(ts);
+        return d.getFullYear() === mesAnt.getFullYear() && d.getMonth() === mesAnt.getMonth();
+      });
+
+      const ma = pedidosMes.length;
+      const mb = pedidosAnt.length;
+      const vari = mb > 0 ? Math.round(((ma-mb)/mb)*100) : (ma > 0 ? 100 : 0);
+      document.getElementById('stat-mes').textContent = ma;
+      const ve = document.getElementById('stat-var');
+      ve.textContent = (vari>=0?'+':'')+vari+'%';
+      ve.style.color = vari>=0?'var(--green)':'var(--red)';
+
+      // Conteo por departamento del mes
+      const conteoDepto = {};
+      pedidosMes.forEach(p => {
+        const dep = p.departamento || detectarDepto(p);
+        conteoDepto[dep] = (conteoDepto[dep]||0) + 1;
+      });
+
+      // Gráfica pastel por departamento
+      renderGraficaDepto(conteoDepto, label);
+
+      // Ranking top 5
+      renderRanking(conteoDepto);
+
+      // Consejos IA
+      db.collection("pedidos").where("estado","==","En Camino").get().then(s => {
+        generarConsejosIA(conteoDepto, ma, s.size, label);
+      });
+    }
+
+    function detectarDepto(p) {
+      // Intentar detectar por nombre de ciudad en dirección si se guardó
+      if (p.ciudad) return p.ciudad;
+      // Por prefijo de teléfono
+      const tel = (p.telefono||'').replace('504','');
+      if (/^(96|97|94|95|32|22)/.test(tel)) return 'Francisco Morazán';
+      if (/^(98|99|88|89|31|33|34|35|36)/.test(tel)) return 'Cortés';
+      return 'Francisco Morazán';
+    }
+
+    function renderGraficaDepto(conteos, label) {
+      document.getElementById('chart-depto-title').textContent = `🥧 Envíos por departamento — ${label}`;
+      const entries = Object.entries(conteos).sort((a,b)=>b[1]-a[1]).filter(([,v])=>v>0);
+      if (entries.length === 0) {
+        document.getElementById('deptoChart').style.display = 'none';
+        document.getElementById('depto-leyenda').innerHTML = '<div style="text-align:center;color:var(--muted);font-size:13px;padding:20px;">Sin datos este mes</div>';
+        return;
+      }
+      document.getElementById('deptoChart').style.display = 'block';
+      const labels = entries.map(([d])=>d);
+      const data = entries.map(([,v])=>v);
+      const colors = entries.map((_,i)=>DEPTO_COLORS_LIST[i % DEPTO_COLORS_LIST.length]);
+      const ctx = document.getElementById('deptoChart').getContext('2d');
+      if (deptoChart) deptoChart.destroy();
+      deptoChart = new Chart(ctx, {
+        type:'doughnut',
+        data:{ labels, datasets:[{ data, backgroundColor:colors, borderWidth:2, borderColor:'#FAF7F2' }] },
+        options:{
+          responsive:true, cutout:'55%',
+          plugins:{
+            legend:{display:false},
+            tooltip:{ callbacks:{ label:c=>`${c.label}: ${c.raw} envío${c.raw!==1?'s':''}` } }
+          }
+        }
+      });
+      // Leyenda personalizada
+      document.getElementById('depto-leyenda').innerHTML = entries.map(([dep,count],i)=>`
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--gray);">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="width:10px;height:10px;border-radius:50%;background:${colors[i]};display:inline-block;flex-shrink:0;"></span>
+            <span style="font-size:12px;font-weight:600;">${dep}</span>
+          </div>
+          <span style="font-size:13px;font-weight:700;color:${colors[i]};">${count}</span>
+        </div>`).join('');
+    }
+
+    function renderRanking(conteos) {
+      const el = document.getElementById('ranking-deptos');
+      const top5 = Object.entries(conteos).sort((a,b)=>b[1]-a[1]).slice(0,5);
+      if (top5.length === 0) {
+        el.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:13px;padding:10px;">Sin datos</div>';
+        return;
+      }
+      const maxCount = top5[0][1];
+      const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+      el.innerHTML = top5.map(([dep,count],i)=>{
+        const pct = Math.round((count/maxCount)*100);
+        const color = DEPTO_COLORS_LIST[i];
+        return `
+        <div style="margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+            <span style="font-size:13px;font-weight:700;">${medals[i]} ${dep}</span>
+            <span style="font-size:13px;font-weight:700;color:${color};">${count} envío${count!==1?'s':''}</span>
+          </div>
+          <div style="background:var(--gray);height:6px;border-radius:4px;overflow:hidden;">
+            <div style="width:${pct}%;height:100%;background:${color};border-radius:4px;transition:width 0.4s;"></div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    async function generarConsejosIA(conteos, totalMes, enCamino, mesLabel) {
+      const el = document.getElementById('ia-consejos');
+      if (!el) return;
+      el.innerHTML = '<div class="ia-loading">✨ Generando consejos...</div>';
+      const top = Object.entries(conteos).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([d,c])=>`${d}(${c})`).join(', ') || 'Sin datos';
+      const ahora = new Date();
+      const prompt = `Eres un asesor de negocio para Eunoia Shop Honduras, tienda online. Hoy es ${ahora.toLocaleDateString('es-HN',{month:'long',day:'numeric',year:'numeric'})}. Analiza estos datos del mes ${mesLabel} y da exactamente 3 consejos cortos, prácticos y relevantes considerando fechas especiales próximas en Honduras (Día de la Madre mayo, Navidad diciembre, etc.):
+- Entregas este mes: ${totalMes}
+- Envíos activos: ${enCamino}  
+- Departamentos con más ventas: ${top}
+Responde SOLO los 3 consejos en español, sin numeración, de 1-2 oraciones cada uno, separados por | `;
+      try {
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:400, messages:[{role:"user",content:prompt}] })
+        });
+        const data = await res.json();
+        const text = data.content?.[0]?.text || '';
+        const tips = text.split('|').map(t=>t.trim()).filter(t=>t.length>10).slice(0,3);
+        el.innerHTML = tips.length > 0
+          ? tips.map(t=>`<div class="ia-tip">💡 ${t}</div>`).join('')
+          : '<div class="ia-tip">💡 Mantén actualizado el seguimiento de tus pedidos activos para mejorar la satisfacción del cliente.</div>';
+      } catch(e) {
+        el.innerHTML = '<div class="ia-tip">💡 Analiza los departamentos con más movimiento para optimizar tu inventario.</div>';
+      }
+    }
+
+        // ── ADMIN ────────────────────────────────────────────
+    const ADMIN_USERS_KEY = 'eunoia_admin_users';
+    const ADMIN_ALARMAS_KEY = 'eunoia_alarmas';
+    const ADMIN_SESSION_KEY = 'eunoia_admin_session';
+
+    function getAdminUsers() {
+      try {
+        const u = JSON.parse(localStorage.getItem(ADMIN_USERS_KEY) || '[]');
+        // Usuario por defecto siempre disponible
+        return [{ user: '@Hernandez2026', pass: 'Eunoia2026', default: true }, ...u];
+      } catch { return [{ user: '@Hernandez2026', pass: 'Eunoia2026', default: true }]; }
+    }
+
+    function getAlarmas() {
+      try { return JSON.parse(localStorage.getItem(ADMIN_ALARMAS_KEY) || '["09:00","10:00","14:30"]'); }
+      catch { return ["09:00","10:00","14:30"]; }
+    }
+
+    function abrirAdmin() {
+      document.getElementById('admin-overlay').classList.add('open');
+      document.getElementById('admin-panel').classList.add('open');
+      // Ver si hay sesión activa
+      if (localStorage.getItem(ADMIN_SESSION_KEY) === '1') {
+        mostrarAdminContenido();
+      } else {
+        document.getElementById('admin-login-view').style.display = 'block';
+        document.getElementById('admin-content-view').style.display = 'none';
+      }
+    }
+
+    function cerrarAdmin() {
+      document.getElementById('admin-overlay').classList.remove('open');
+      document.getElementById('admin-panel').classList.remove('open');
+    }
+
+    function loginAdmin() {
+      const user = document.getElementById('admin-user').value.trim();
+      const pass = document.getElementById('admin-pass').value.trim();
+      const users = getAdminUsers();
+      const found = users.find(u => u.user === user && u.pass === pass);
+      if (found) {
+        localStorage.setItem(ADMIN_SESSION_KEY, '1');
+        document.getElementById('admin-err').style.display = 'none';
+        mostrarAdminContenido();
+      } else {
+        document.getElementById('admin-err').style.display = 'block';
+      }
+    }
+
+    function logoutAdmin() {
+      localStorage.removeItem(ADMIN_SESSION_KEY);
+      document.getElementById('admin-login-view').style.display = 'block';
+      document.getElementById('admin-content-view').style.display = 'none';
+      document.getElementById('admin-user').value = '';
+      document.getElementById('admin-pass').value = '';
+    }
+
+    async function mostrarAdminContenido() {
+      document.getElementById('admin-login-view').style.display = 'none';
+      document.getElementById('admin-content-view').style.display = 'block';
+      renderAlarmas();
+      await cargarClientesAdmin();
+      await cargarHistorialAdmin();
+      renderUsuarios();
+    }
+
+    function renderAlarmas() {
+      const alarmas = getAlarmas();
+      const el = document.getElementById('admin-alarmas-list');
+      el.innerHTML = alarmas.map((a, i) => `
+        <div class="admin-row">
+          <span style="font-weight:600;">🕐 ${a}</span>
+          <button class="admin-btn-sm admin-btn-red" onclick="eliminarAlarma(${i})">Eliminar</button>
+        </div>`).join('') || '<div style="color:var(--muted);font-size:12px;">No hay alarmas</div>';
+    }
+
+    function agregarAlarma() {
+      const hora = document.getElementById('nueva-alarma-hora').value;
+      if (!hora) return;
+      const alarmas = getAlarmas();
+      if (alarmas.includes(hora)) return alert('Esa hora ya existe');
+      alarmas.push(hora);
+      alarmas.sort();
+      localStorage.setItem(ADMIN_ALARMAS_KEY, JSON.stringify(alarmas));
+      renderAlarmas();
+      document.getElementById('nueva-alarma-hora').value = '';
+    }
+
+    function eliminarAlarma(i) {
+      const alarmas = getAlarmas();
+      alarmas.splice(i, 1);
+      localStorage.setItem(ADMIN_ALARMAS_KEY, JSON.stringify(alarmas));
+      renderAlarmas();
+    }
+
+    async function cargarClientesAdmin() {
+      const snap = await db.collection("pedidos").where("estado","==","En Camino").get();
+      const el = document.getElementById('admin-clientes-list');
+      if (snap.empty) { el.innerHTML = '<div style="color:var(--muted);font-size:12px;">No hay clientes en camino</div>'; return; }
+      el.innerHTML = snap.docs.map(doc => {
+        const p = doc.data();
+        const dias = Math.floor((Date.now() - (p.fecha||0)) / 86400000);
+        return `<div class="admin-row">
+          <div>
+            <div style="font-weight:600;font-size:13px;">${p.nombre}</div>
+            <div style="font-size:10px;color:var(--muted);">${p.guia} · ${dias} día${dias!==1?'s':''}</div>
+          </div>
+          <span class="${p.servicio==='COD'?'tag-cod':'tag-std'}">${p.servicio||'STD'}</span>
+        </div>`;
+      }).join('');
+    }
+
+    async function cargarHistorialAdmin() {
+      const snap = await db.collection("pedidos").where("estado","in",["Entregado","No Entregado"]).get();
+      const el = document.getElementById('admin-historial-list');
+      if (snap.empty) { el.innerHTML = '<div style="color:var(--muted);font-size:12px;">Sin historial</div>'; return; }
+      el.innerHTML = snap.docs.slice(0,10).map(doc => {
+        const p = doc.data();
+        const es = p.estado === 'Entregado';
+        return `<div class="admin-row">
+          <div>
+            <div style="font-weight:600;font-size:12px;">${p.nombre}</div>
+            <div style="font-size:10px;color:var(--muted);">${p.guia}</div>
+          </div>
+          <div style="text-align:right;">
+            <span class="${p.servicio==='COD'?'tag-cod':'tag-std'}">${p.servicio||'STD'}</span>
+            <div style="font-size:10px;color:${es?'var(--green)':'var(--red)'};">${p.estado}</div>
+          </div>
+        </div>`;
+      }).join('') + (snap.size > 10 ? `<div style="font-size:11px;color:var(--muted);text-align:center;padding:8px;">...y ${snap.size-10} más en el Excel</div>` : '');
+    }
+
+    async function descargarExcel() {
+      const snap = await db.collection("pedidos").get();
+      const rows = [['Nombre','Teléfono','Guía','Servicio','Tipo','Estado','Fecha','Motivo']];
+      snap.docs.forEach(doc => {
+        const p = doc.data();
+        const fecha = p.fecha ? new Date(p.fecha).toLocaleDateString('es-HN') : '';
+        rows.push([p.nombre||'', p.telefono||'', p.guia||'', p.servicio||'STD', p.esAgencia?'Agencia':'Domicilio', p.estado||'', fecha, p.motivo||'']);
+      });
+      const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `Eunoia_Clientes_${new Date().toLocaleDateString('es-HN').replace(/\//g,'-')}.csv`;
+      a.click(); URL.revokeObjectURL(url);
+    }
+
+    function renderUsuarios() {
+      const users = JSON.parse(localStorage.getItem(ADMIN_USERS_KEY) || '[]');
+      const el = document.getElementById('admin-users-list');
+      const defaultHtml = '<div class="admin-row"><span style="font-size:12px;">@Hernandez2026</span><span style="font-size:10px;color:var(--muted);">Principal</span></div>';
+      el.innerHTML = defaultHtml + users.map((u, i) => `
+        <div class="admin-row">
+          <span style="font-size:12px;">${u.user}</span>
+          <button class="admin-btn-sm admin-btn-red" onclick="eliminarUsuario(${i})">Eliminar</button>
+        </div>`).join('');
+    }
+
+    function agregarUsuario() {
+      const user = document.getElementById('new-user-name').value.trim();
+      const pass = document.getElementById('new-user-pass').value.trim();
+      if (!user || !pass) return alert('Completa usuario y contraseña');
+      const users = JSON.parse(localStorage.getItem(ADMIN_USERS_KEY) || '[]');
+      users.push({ user, pass });
+      localStorage.setItem(ADMIN_USERS_KEY, JSON.stringify(users));
+      document.getElementById('new-user-name').value = '';
+      document.getElementById('new-user-pass').value = '';
+      renderUsuarios();
+    }
+
+    function eliminarUsuario(i) {
+      const users = JSON.parse(localStorage.getItem(ADMIN_USERS_KEY) || '[]');
+      users.splice(i, 1);
+      localStorage.setItem(ADMIN_USERS_KEY, JSON.stringify(users));
+      renderUsuarios();
+    }
+
+    // ── NAV ───────────────────────────────────────────────
+    function irA(id) {
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+      const btn = document.querySelector(`[data-panel="${id}"]`);
+      if (btn) btn.classList.add('active');
+      if (id==='p-s') cargarSeguimiento();
+      if (id==='p-h') cargarHistorial();
+      if (id==='p-v') cargarVentas();
+    }
+
+    // ── INIT ──────────────────────────────────────────────
+    // ── SWIPE PARA CAMBIAR PESTAÑAS ──────────────────────
+    (function() {
+      const tabs = ['p-c','p-s','p-h','p-v'];
+      let startX = 0, startY = 0, isDragging = false;
+      document.body.addEventListener('touchstart', e => {
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        isDragging = true;
+      }, { passive: true });
+      document.body.addEventListener('touchend', e => {
+        if (!isDragging) return;
+        isDragging = false;
+        const dx = e.changedTouches[0].clientX - startX;
+        const dy = Math.abs(e.changedTouches[0].clientY - startY);
+        if (Math.abs(dx) < 60 || dy > 80) return; // No fue swipe horizontal
+        const current = tabs.findIndex(t => document.getElementById(t)?.classList.contains('active'));
+        if (dx < 0 && current < tabs.length-1) irA(tabs[current+1]); // swipe izquierda → siguiente
+        if (dx > 0 && current > 0) irA(tabs[current-1]); // swipe derecha → anterior
+      }, { passive: true });
+    })();
+
+    window.addEventListener('load', () => {
+      irA('p-c');
+      registrarSW();
+      if (localStorage.getItem('notif_activas') === '1' && Notification.permission === 'granted') {
+        document.getElementById('bell-dot').classList.add('visible');
+        const s = document.getElementById('notif-status');
+        s.style.display = 'block';
+        s.textContent = '🔔 Activo — recordatorios a las 9:00 AM y 2:30 PM';
+        s.className = 'notif-status ok';
+        setTimeout(() => { s.style.display = 'none'; }, 3000);
+        programarAmbas();
+      }
+    });
+  </script>
+</head>
+
+<body>
+  <header>
+    <div style="width:36px;"></div>
+    <div class="header-logo">
+      <div class="logo-text">Eunoia Shop</div>
+      <span class="logo-sub">Control de Envíos</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:4px;">
+      <button class="bell-btn" onclick="abrirAdmin()" title="Administrador" style="font-size:18px;">⚙️</button>
+      <button class="bell-btn" onclick="toggleNotifPanel()" title="Ver pendientes">
+        <span class="bell-icon">🔔</span>
+        <span class="bell-dot" id="bell-dot"></span>
+      </button>
+    </div>
+  </header>
+  <div id="notif-status" class="notif-status" style="display:none;"></div>
+
+  <nav>
+    <button class="nav-btn" data-panel="p-c" onclick="irA('p-c')">Despacho</button>
+    <button class="nav-btn" data-panel="p-s" onclick="irA('p-s')">Seguimiento</button>
+    <button class="nav-btn" data-panel="p-h" onclick="irA('p-h')">Historial</button>
+    <button class="nav-btn" data-panel="p-v" onclick="irA('p-v')">Analítica</button>
+  </nav>
+
+  <!-- PANEL ADMIN -->
+  <div class="admin-overlay" id="admin-overlay" onclick="cerrarAdmin()"></div>
+  <div class="admin-panel" id="admin-panel">
+    <div class="admin-header">
+      <div class="admin-title">⚙️ Administrador</div>
+      <button class="notif-close" onclick="cerrarAdmin()">✕</button>
+    </div>
+    <!-- LOGIN -->
+    <div id="admin-login-view">
+      <div class="admin-login">
+        <div class="admin-login-title">Acceso Admin</div>
+        <input class="admin-input" id="admin-user" placeholder="Usuario" type="text">
+        <input class="admin-input" id="admin-pass" placeholder="Contraseña" type="password">
+        <div class="admin-login-err" id="admin-err">Usuario o contraseña incorrectos</div>
+        <button class="btn btn-black" onclick="loginAdmin()">Entrar</button>
+      </div>
+    </div>
+    <!-- CONTENIDO ADMIN -->
+    <div id="admin-content-view" style="display:none;">
+      <!-- Alarmas -->
+      <div class="admin-section">
+        <div class="admin-section-title">⏰ Alarmas</div>
+        <div id="admin-alarmas-list"></div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <input class="admin-input" id="nueva-alarma-hora" type="time" style="margin-bottom:0;flex:1;">
+          <button class="admin-btn-sm admin-btn-green" onclick="agregarAlarma()">+ Agregar</button>
+        </div>
+      </div>
+      <!-- Lista clientes -->
+      <div class="admin-section">
+        <div class="admin-section-title">📋 Clientes en camino</div>
+        <div id="admin-clientes-list"></div>
+      </div>
+      <!-- Historial clientes -->
+      <div class="admin-section">
+        <div class="admin-section-title">📦 Historial completo</div>
+        <div id="admin-historial-list"></div>
+        <button class="btn btn-black" style="margin-top:12px;font-size:11px;padding:10px;" onclick="descargarExcel()">📥 Descargar Excel</button>
+      </div>
+      <!-- Usuarios -->
+      <div class="admin-section">
+        <div class="admin-section-title">👤 Usuarios</div>
+        <div id="admin-users-list"></div>
+        <div style="margin-top:10px;">
+          <input class="admin-input" id="new-user-name" placeholder="Usuario (ej: @Maria2026)">
+          <input class="admin-input" id="new-user-pass" placeholder="Contraseña" type="password">
+          <button class="admin-btn-sm admin-btn-green" onclick="agregarUsuario()">+ Agregar usuario</button>
+        </div>
+      </div>
+      <div style="padding:16px;">
+        <button class="btn btn-gray" style="font-size:11px;padding:10px;" onclick="logoutAdmin()">Cerrar sesión</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PANEL NOTIFICACIONES -->
+  <div class="notif-overlay" id="notif-overlay" onclick="cerrarNotifPanel()"></div>
+  <div class="notif-panel" id="notif-panel">
+    <div class="notif-panel-header">
+      <div class="notif-panel-title">🔔 Pendientes</div>
+      <button class="notif-close" onclick="cerrarNotifPanel()">✕</button>
+    </div>
+    <div class="notif-count" id="notif-panel-count"></div>
+    <div class="notif-list" id="notif-panel-list"></div>
+    <div style="padding:12px 16px; border-top:1px solid var(--gray2); flex-shrink:0;">
+      <button class="btn btn-black" style="font-size:11px; padding:10px; margin-bottom:0;" onclick="iniciarNotificaciones()">
+        ⏰ Activar recordatorios 9am y 2:30pm
+      </button>
+    </div>
+  </div>
+
+  <!-- DESPACHO -->
+  <div id="p-c" class="panel active">
+    <div class="section-title">Despacho <span>✦</span></div>
+    <div class="file-wrap" onclick="document.getElementById('pdf-input').click()">
+      <input type="file" id="pdf-input" accept=".pdf" onchange="leerPDF(this.files[0])">
+      <div class="file-icon">📎</div>
+      <div class="file-text">Toca para subir guías PDF</div>
+      <div class="file-name" id="file-name"></div>
+    </div>
+    <div id="list-c"></div>
+  </div>
+
+  <!-- SEGUIMIENTO -->
+  <div id="p-s" class="panel">
+    <div class="section-title">Seguimiento <span>✦</span></div>
+    <input type="search" id="buscar-s" placeholder="🔍 Buscar cliente o guía..." oninput="filtrarSeguimiento()" class="edit-input" style="margin-bottom:14px;font-size:14px;padding:8px 4px;">
+    <div id="list-s"></div>
+  </div>
+
+  <!-- HISTORIAL -->
+  <div id="p-h" class="panel">
+    <div class="section-title">Historial <span>✦</span></div>
+    <input type="search" id="buscar-h" placeholder="🔍 Buscar cliente o guía..." oninput="filtrarHistorial()" class="edit-input" style="margin-bottom:12px;font-size:14px;padding:8px 4px;">
+    <div class="filtro-wrap">
+      <button class="filtro-btn active" data-filtro="todos" onclick="cargarHistorial('todos')">Todos</button>
+      <button class="filtro-btn" data-filtro="entregado" onclick="cargarHistorial('entregado')">Entregados</button>
+      <button class="filtro-btn" data-filtro="no" onclick="cargarHistorial('no')">No entregados</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;">
+      <input type="date" id="filtro-fecha-h" class="edit-input" style="margin-bottom:0;flex:1;font-size:12px;" onchange="filtrarHistorial()">
+      <button onclick="document.getElementById('filtro-fecha-h').value='';filtrarHistorial();" style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;white-space:nowrap;">✕ Limpiar</button>
+    </div>
+    <div id="list-h"></div>
+  </div>
+
+  <!-- ANALÍTICA -->
+  <div id="p-v" class="panel">
+    <div class="section-title">Analítica <span>✦</span></div>
+    <!-- Selector de mes -->
+    <div style="display:flex;align-items:center;justify-content:space-between;background:white;border-radius:12px;padding:10px 16px;margin-bottom:14px;box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+      <button onclick="cambiarMesAnalítica(-1)" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--orange);padding:0 8px;">‹</button>
+      <span id="mes-label-analitica" style="font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:700;color:var(--black);text-transform:capitalize;">—</span>
+      <button onclick="cambiarMesAnalítica(1)" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--orange);padding:0 8px;">›</button>
+    </div>
+    <!-- Stats del mes -->
+    <div class="stat-grid">
+      <div class="stat-box"><div class="stat-num" id="stat-total">—</div><div class="stat-label">Total histórico</div></div>
+      <div class="stat-box"><div class="stat-num" id="stat-mes">—</div><div class="stat-label">Este mes</div></div>
+    </div>
+    <div class="stat-grid" style="grid-template-columns:1fr;">
+      <div class="stat-box green"><div class="stat-num" id="stat-var" style="font-size:24px;">—</div><div class="stat-label">vs. mes anterior</div></div>
+    </div>
+    <!-- Gráfica de pastel por departamento -->
+    <div class="chart-wrap">
+      <div class="chart-title" id="chart-depto-title">🥧 Envíos por departamento</div>
+      <canvas id="deptoChart" height="240"></canvas>
+      <div id="depto-leyenda" style="margin-top:10px;"></div>
+    </div>
+    <!-- Ranking top 5 departamentos -->
+    <div class="chart-wrap">
+      <div class="chart-title">🏆 Top 5 departamentos</div>
+      <div id="ranking-deptos"></div>
+    </div>
+    <!-- Consejos IA -->
+    <div class="ia-box">
+      <div class="ia-title">✨ Consejos de IA</div>
+      <div id="ia-consejos"><div class="ia-loading">Analizando datos...</div></div>
+    </div>
+    <!-- Gráfica histórica por mes -->
+    <div class="chart-wrap">
+      <div class="chart-title">📈 Histórico de entregas</div>
+      <canvas id="ventasChart" height="220"></canvas>
+    </div>
+  </div>
+</body>
+</html>
