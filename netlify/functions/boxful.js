@@ -65,6 +65,14 @@ function parseTracking(html) {
   const ALL_STATES = ["Creado", "Registrado", "Recolectado", "Ruta a destino", "Entregado"];
   const steps = [];
 
+  // Helper: un paso está "done" si tiene fecha real O si tiene clases de completado
+  // Un paso está pendiente solo si explícitamente dice "Pendiente" o no tiene fecha
+  function isDone(block, dateMatch) {
+    if (/[Pp]endiente/.test(block) && !dateMatch) return false;
+    if (dateMatch) return true; // Tiene fecha real => completado
+    return /(?:completed|done|active|success|checked|completado)/i.test(block);
+  }
+
   // Intentar extraer pasos de timeline con fecha/hora
   const timelineRegex = /<li[^>]*>([\s\S]*?)<\/li>/gi;
   let match;
@@ -73,29 +81,29 @@ function parseTracking(html) {
     const titleMatch = block.match(/<[^>]*>([^<]*(?:Creado|Registrado|Recolectado|Ruta a destino|Ruta|Entregado)[^<]*)<\/[^>]*>/i);
     if (!titleMatch) continue;
     const dateMatch = block.match(/(\d{1,2}\s+\w+\s+\d{4}\s*[·•]\s*\d{1,2}:\d{2}\s*(?:am|pm)?)/i)
-      || block.match(/(\d{1,2}\s+\w+\s+\d{4}[^<]{0,20}\d{1,2}:\d{2}[^<]*)/i);
-    const isPending = /[Pp]endiente/.test(block);
-    const completedMatch = /(?:completed|done|active|success|checked)/i.test(block);
+      || block.match(/(\d{1,2}\s+\w+\s+\d{4}[^<]{0,20}\d{1,2}:\d{2}[^<]*)/i)
+      || block.match(/(\d{1,2}\s+(?:ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)[a-z]*\.?\s+\d{4})/i);
+    const done = isDone(block, dateMatch);
     steps.push({
       title: titleMatch[1].trim(),
-      date: dateMatch ? dateMatch[1].trim() : (isPending ? "Pendiente" : "Completado"),
-      done: !isPending && completedMatch,
+      date: dateMatch ? dateMatch[1].trim() : (done ? "Completado" : "Pendiente"),
+      done,
     });
   }
 
   // Fallback con divs
   if (steps.length === 0) {
-    const divRegex = /<div[^>]*class="[^"]*(?:step|track|status|event)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
+    const divRegex = /<div[^>]*class="[^"]*(?:step|track|status|event|timeline)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
     while ((match = divRegex.exec(html)) !== null) {
       const block = match[1];
       const titleMatch = block.match(/>([^<]+(?:Creado|Registrado|Recolectado|Ruta|Entregado)[^<]*)</i);
       if (!titleMatch) continue;
       const dateMatch = block.match(/(\d{1,2}\s+\w+\s+\d{4}[^<]*\d{1,2}:\d{2}[^<]*)/i);
-      const isPending = /[Pp]endiente/.test(block);
+      const done = isDone(block, dateMatch);
       steps.push({
         title: titleMatch[1].trim(),
-        date: dateMatch ? dateMatch[1].trim() : (isPending ? "Pendiente" : "Completado"),
-        done: !isPending,
+        date: dateMatch ? dateMatch[1].trim() : (done ? "Completado" : "Pendiente"),
+        done,
       });
     }
   }
@@ -107,13 +115,30 @@ function parseTracking(html) {
       const m = html.match(regex);
       if (m) {
         const dateM = m[0].match(/(\d{1,2}\s+\w{3,}\s+\d{4}[^<\n]*\d{1,2}:\d{2}[^<\n]*)/);
-        const isPending = /[Pp]endiente/.test(m[0].substring(0, 60));
+        const done = isDone(m[0].substring(0, 120), dateM);
         steps.push({
           title: name,
-          date: dateM ? dateM[1].trim() : (isPending ? "Pendiente" : "Completado"),
-          done: !isPending,
+          date: dateM ? dateM[1].trim() : (done ? "Completado" : "Pendiente"),
+          done,
         });
       }
+    });
+  }
+
+  // Si ningún método funcionó, intentar leer el orden visual del HTML
+  // Box Full muestra los pasos completados con fechas inline en el texto
+  if (steps.length === 0) {
+    ALL_STATES.forEach((name) => {
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`(${escaped})[^<]{0,200}`, "i");
+      const m = html.match(regex);
+      const found = !!m;
+      const dateM = m ? m[0].match(/(\d{1,2}[\s\/\-]\w+[\s\/\-]\d{2,4})/) : null;
+      steps.push({
+        title: name,
+        date: dateM ? dateM[1] : (found ? "Completado" : "Pendiente"),
+        done: found && (dateM !== null || !/[Pp]endiente/.test(m[0].substring(0, 60))),
+      });
     });
   }
 
@@ -126,12 +151,22 @@ function parseTracking(html) {
     }
   });
 
-  // Ordenar en el orden correcto
-  steps.sort((a, b) => {
+  // Consistencia: si un paso posterior está done, los anteriores también deben estarlo
+  const ordered = [...steps].sort((a, b) => {
     const ai = ALL_STATES.findIndex(o => a.title.toLowerCase().includes(o.toLowerCase().split(' ')[0]));
     const bi = ALL_STATES.findIndex(o => b.title.toLowerCase().includes(o.toLowerCase().split(' ')[0]));
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
   });
 
-  return steps;
+  // Si "Recolectado" o posterior están done, forzar done en los anteriores
+  let lastDoneIdx = -1;
+  ordered.forEach((s, i) => { if (s.done) lastDoneIdx = i; });
+  for (let i = 0; i <= lastDoneIdx; i++) {
+    if (!ordered[i].done) {
+      ordered[i].done = true;
+      if (ordered[i].date === "Pendiente") ordered[i].date = "Completado";
+    }
+  }
+
+  return ordered;
 }
