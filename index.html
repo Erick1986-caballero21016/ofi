@@ -1011,13 +1011,110 @@
     }
 
     function detectarDepto(p) {
-      // Intentar detectar por nombre de ciudad en dirección si se guardó
       if (p.ciudad) return p.ciudad;
-      // Por prefijo de teléfono
-      const tel = (p.telefono||'').replace('504','');
-      if (/^(96|97|94|95|32|22)/.test(tel)) return 'Francisco Morazán';
-      if (/^(98|99|88|89|31|33|34|35|36)/.test(tel)) return 'Cortés';
-      return 'Francisco Morazán';
+      if (p.departamento) return p.departamento;
+      const tel = (p.telefono || '').replace(/^504/, '').replace(/\D/g, '');
+      const pre4 = tel.substring(0, 4);
+      const pre2 = tel.substring(0, 2);
+
+      // Prefijos 4 dígitos (más específicos primero)
+      const MAP4 = {
+        // Francisco Morazán - Tegucigalpa
+        '2221':'Francisco Morazán','2222':'Francisco Morazán','2223':'Francisco Morazán',
+        '2224':'Francisco Morazán','2225':'Francisco Morazán','2226':'Francisco Morazán',
+        '2227':'Francisco Morazán','2228':'Francisco Morazán','2229':'Francisco Morazán',
+        '2230':'Francisco Morazán','2231':'Francisco Morazán','2232':'Francisco Morazán',
+        '2233':'Francisco Morazán','2234':'Francisco Morazán','2235':'Francisco Morazán',
+        '2236':'Francisco Morazán','2237':'Francisco Morazán','2238':'Francisco Morazán',
+        '2239':'Francisco Morazán',
+        // Cortés - San Pedro Sula
+        '2550':'Cortés','2551':'Cortés','2552':'Cortés','2553':'Cortés','2554':'Cortés',
+        '2555':'Cortés','2556':'Cortés','2557':'Cortés','2558':'Cortés','2559':'Cortés',
+        '2560':'Cortés','2561':'Cortés','2562':'Cortés','2563':'Cortés','2564':'Cortés',
+        '2565':'Cortés','2566':'Cortés','2567':'Cortés','2568':'Cortés','2569':'Cortés',
+        // Atlántida - La Ceiba
+        '2440':'Atlántida','2441':'Atlántida','2442':'Atlántida','2443':'Atlántida',
+        '2444':'Atlántida','2445':'Atlántida','2446':'Atlántida','2447':'Atlántida',
+        // Yoro
+        '2671':'Yoro','2672':'Yoro','2673':'Yoro','2674':'Yoro',
+        // Olancho - Juticalpa
+        '2785':'Olancho','2786':'Olancho','2787':'Olancho','2788':'Olancho','2789':'Olancho',
+        // El Paraíso
+        '2763':'El Paraíso','2764':'El Paraíso','2765':'El Paraíso',
+        // Choluteca
+        '2782':'Choluteca','2783':'Choluteca','2784':'Choluteca',
+        // Comayagua
+        '2771':'Comayagua','2772':'Comayagua','2773':'Comayagua',
+        // Copán
+        '2651':'Copán','2652':'Copán','2653':'Copán','2654':'Copán',
+        // Santa Bárbara
+        '2643':'Santa Bárbara','2644':'Santa Bárbara','2645':'Santa Bárbara',
+        // Ocotepeque
+        '2653':'Ocotepeque',
+        // Lempira
+        '2786':'Lempira',
+        // Intibucá
+        '2783':'Intibucá',
+        // La Paz
+        '2774':'La Paz','2775':'La Paz',
+        // Valle
+        '2781':'Valle',
+        // Colón
+        '2449':'Colón','2448':'Colón',
+        // Gracias a Dios
+        '2898':'Gracias a Dios',
+        // Islas de la Bahía
+        '2445':'Islas de la Bahía',
+      };
+
+      if (MAP4[pre4]) return MAP4[pre4];
+
+      // Prefijos móviles por operadora (2 dígitos) → departamento por contexto
+      // Tigo: 98, 99, 88, 89 / Claro: 96, 97 / Honduras: 94, 95, 31–36
+      // Sin ubicación exacta por prefijo móvil, usar contexto del nombre
+      const CIUDADES_DEPTO = {
+        'tegucigalpa':'Francisco Morazán','tegucigal':'Francisco Morazán',
+        'san pedro':'Cortés','sps':'Cortés','san pedro sula':'Cortés',
+        'la ceiba':'Atlántida','ceiba':'Atlántida',
+        'choloma':'Cortés','villanueva':'Cortés','la lima':'Cortés','el progreso':'Yoro',
+        'siguatepeque':'Comayagua','comayagua':'Comayagua',
+        'juticalpa':'Olancho','olancho':'Olancho',
+        'danli':'El Paraíso','paraiso':'El Paraíso','el paraíso':'El Paraíso',
+        'choluteca':'Choluteca',
+        'santa rosa':'Copán','copán':'Copán','copan':'Copán',
+        'santa barbara':'Santa Bárbara','santa bárbara':'Santa Bárbara',
+        'tela':'Atlántida','trujillo':'Colón','colon':'Colón','colón':'Colón',
+        'yoro':'Yoro','el progreso':'Yoro',
+        'la paz':'La Paz',
+        'intibuca':'Intibucá','intibucá':'Intibucá',
+        'gracias':'Lempira','lempira':'Lempira',
+        'ocotepeque':'Ocotepeque',
+        'roatan':'Islas de la Bahía','roatán':'Islas de la Bahía','utila':'Islas de la Bahía','guanaja':'Islas de la Bahía',
+        'puerto cortés':'Cortés','puerto cortes':'Cortés',
+        'nacaome':'Valle','amapala':'Valle','valle':'Valle',
+      };
+
+      // Buscar en nombre y teléfono
+      const textosBuscar = [
+        (p.nombre || '').toLowerCase(),
+        (p.contenido || '').toLowerCase(),
+      ];
+      for (const txt of textosBuscar) {
+        for (const [ciudad, depto] of Object.entries(CIUDADES_DEPTO)) {
+          if (txt.includes(ciudad)) return depto;
+        }
+      }
+
+      // Último fallback por prefijo móvil 2 dígitos
+      const MAP2_MOVIL = {
+        '96':'Francisco Morazán','97':'Francisco Morazán',
+        '94':'Cortés','95':'Cortés',
+        '98':'Cortés','99':'Cortés',
+        '88':'Francisco Morazán','89':'Francisco Morazán',
+        '31':'Cortés','32':'Francisco Morazán','33':'Cortés',
+        '34':'Cortés','35':'Yoro','36':'Atlántida',
+      };
+      return MAP2_MOVIL[pre2] || 'Francisco Morazán';
     }
 
     function renderGraficaDepto(conteos, label) {
